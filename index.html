@@ -328,7 +328,7 @@
         }
         return;
       }
-      if (e.key === 'm' || e.key === 'M') {
+      if ((e.key === 'm' || e.key === 'M') && game.state !== 'playing') {
         const muted = TYPERUN_AUDIO.toggleMute();
         document.getElementById('mute-indicator').textContent = muted ? '🔇' : '🔊';
         document.getElementById('mute-indicator').style.opacity = muted ? '0.8' : '0';
