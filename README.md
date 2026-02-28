@@ -2,7 +2,7 @@
 
 A browser-based typing game. Words fly across the screen — type them before they reach you.
 
-**[Play it →](https://typerun.vercel.app)**
+**[Play it →](https://typerunner.xyz/)**
 
 ## How to play
 
