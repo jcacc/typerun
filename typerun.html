@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TYPERUN</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d0d1a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: 'Space Mono', 'Courier New', monospace;
+      overflow: hidden;
+    }
+    #game-container {
+      position: relative;
+      width: 800px;
+      height: 400px;
+    }
+    canvas {
+      display: block;
+      border: 2px solid #1e1e35;
+      border-radius: 4px;
+    }
+    .overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(13, 13, 26, 0.93);
+      color: white;
+      border-radius: 4px;
+      font-family: 'Space Mono', 'Courier New', monospace;
+    }
+    .overlay h1 {
+      font-size: 3.8rem;
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      color: #ffd700;
+      text-shadow: 0 0 40px #ffd70055;
+      margin-bottom: 0.6rem;
+    }
+    .overlay .subtitle {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 0.3rem;
+      letter-spacing: 0.08em;
+    }
+    .overlay .best-score {
+      font-size: 0.8rem;
+      color: #444;
+      margin-bottom: 2rem;
+    }
+    .press-enter {
+      font-size: 1rem;
+      color: #00ff88;
+      letter-spacing: 0.12em;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .stat {
+      font-size: 0.95rem;
+      color: #bbb;
+      margin: 0.2rem 0;
+      letter-spacing: 0.06em;
+    }
+    .stat span { color: #ffd700; }
+    #hud {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      font-family: 'Space Mono', 'Courier New', monospace;
+    }
+    #score-display {
+      position: absolute;
+      top: 10px; left: 28px;
+      color: rgba(255,255,255,0.85);
+      font-size: 0.9rem;
+      letter-spacing: 0.06em;
+    }
+    #level-display {
+      position: absolute;
+      top: 10px; left: 50%;
+      transform: translateX(-50%);
+      color: #555;
+      font-size: 0.75rem;
+      letter-spacing: 0.18em;
+    }
+    #streak-display {
+      position: absolute;
+      top: 28px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      color: #ff9f43;
+      text-shadow: 0 0 8px #ff9f4388;
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+    #lives-display {
+      position: absolute;
+      top: 8px; right: 14px;
+      font-size: 1.25rem;
+      letter-spacing: 3px;
+    }
+    #pause-screen h2 {
+      font-size: 2.4rem;
+      font-weight: 700;
+      letter-spacing: 0.35em;
+      color: #74b9ff;
+      text-shadow: 0 0 24px #74b9ff55;
+      margin-bottom: 0.75rem;
+    }
+    #pause-screen .resume-hint {
+      font-size: 0.85rem;
+      color: #444;
+      letter-spacing: 0.12em;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="canvas" width="800" height="400"></canvas>
+
+    <div id="hud" class="hidden">
+      <div id="score-display">SCORE: <span id="score-val">0</span></div>
+      <div id="level-display">LEVEL <span id="level-val">1</span></div>
+      <div id="streak-display"></div>
+      <div id="lives-display"></div>
+    </div>
+
+    <div id="start-screen" class="overlay">
+      <h1>TYPERUN</h1>
+      <div class="subtitle">type words before they reach you</div>
+      <div class="best-score" id="best-score-display">BEST: 0</div>
+      <div class="press-enter">PRESS ENTER TO START</div>
+    </div>
+
+    <div id="pause-screen" class="overlay hidden">
+      <h2>PAUSED</h2>
+      <div class="resume-hint">ESC to resume</div>
+    </div>
+
+    <div id="gameover-screen" class="overlay hidden">
+      <h1>GAME OVER</h1>
+      <div class="stat" style="margin-top:0.6rem;">SCORE &nbsp;<span id="go-score">0</span></div>
+      <div class="stat">WORDS &nbsp;<span id="go-words">0</span></div>
+      <div class="stat">PERFECT &nbsp;<span id="go-perfect">0</span></div>
+      <div class="stat">BEST STREAK &nbsp;<span id="go-streak">0</span></div>
+      <div class="stat" style="color:#444; font-size:0.8rem; margin-top:0.4rem;">BEST SCORE &nbsp;<span id="go-best">0</span></div>
+      <div class="press-enter" style="margin-top:1.6rem;">PRESS ENTER TO RESTART</div>
+    </div>
+  </div>
+
+  <script src="words.js"></script>
+  <script src="audio.js"></script>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx    = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+
+    const FONT      = "bold 18px 'Space Mono', 'Courier New', monospace";
+    const FONT_SM   = "11px 'Space Mono', 'Courier New', monospace";
+    const LANE_Y    = { high: 125, mid: 205, low: 275 };
+    const LANE_KEYS = Object.keys(LANE_Y);
+    const GROUND_Y  = 315;
+    const PLAYER_X  = 95;
+
+    let bestScore  = parseInt(localStorage.getItem('typerun_best')   || '0');
+    let bestStreak = parseInt(localStorage.getItem('typerun_streak') || '0');
+
+    let stars = [], groundDots = [], speedLines = [];
+    let mountFarOff = 0, mountNrOff = 0;
+    let game = { state: 'idle' };
+
+    function initStars() {
+      stars = [];
+      for (let i = 0; i < 90; i++) {
+        stars.push({
+          x: Math.random() * W,
+          y: 5 + Math.random() * (GROUND_Y * 0.85),
+          r: 0.4 + Math.random() * 1.4,
+          twinkle: Math.random() * Math.PI * 2,
+          speed: 0.04 + Math.random() * 0.12,
+        });
+      }
+    }
+    function initGroundDots() {
+      groundDots = [];
+      for (let i = 0; i < 22; i++)
+        groundDots.push({ x: Math.random() * W, len: 12 + Math.random() * 20, layer: 0.6 + Math.random() * 0.4 });
+    }
+    function initSpeedLines() {
+      speedLines = [];
+      for (let i = 0; i < 22; i++)
+        speedLines.push({ x: Math.random() * W, y: 15 + Math.random() * (GROUND_Y - 30), width: 30 + Math.random() * 160, speed: 5 + Math.random() * 12 });
+    }
+
+    // ── Difficulty ────────────────────────────────────────────────────────────
+    function getLevel(n)    { return Math.floor(n / 10) + 1; }
+    function getTier(level) { return level <= 2 ? 0 : level <= 4 ? 1 : level <= 6 ? 2 : 3; }
+    function baseSpeed(lv)    { return 1.4 + (lv - 1) * 0.20; }
+    function baseInterval(lv) { return Math.max(900, 2600 - (lv - 1) * 180); }
+    function spdMult(s)       { return 1 + Math.min(s, 20) * 0.05; }
+    function intMult(s)       { return 1 / (1 + Math.min(s, 20) * 0.04); }
+    function effSpeed(lv, s)  { return baseSpeed(lv) * spdMult(s); }
+    function effInterval(lv, s) { return baseInterval(lv) * intMult(s); }
+
+    function pickWord(level) {
+      const { tiers } = window.TYPERUN_WORDS;
+      const tier = getTier(level);
+      const pool = tier === 0 ? tiers[0]
+                 : tier === 1 ? [...tiers[0].slice(0,12), ...tiers[1]]
+                 : tier === 2 ? [...tiers[1].slice(0,10), ...tiers[2]]
+                 :              [...tiers[2].slice(0,8),  ...tiers[3]];
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+    function randomLane() { return LANE_KEYS[Math.floor(Math.random() * 3)]; }
+
+    // ── Game management ──────────────────────────────────────────────────────
+    function resetGame() {
+      game = {
+        state: 'playing', score: 0, lives: 3, wordsTyped: 0, level: 1,
+        perfectStreak: 0, perfectTotal: 0, sessionBestStreak: 0,
+        words: [], particles: [], floats: [], activeWord: null,
+        lastSpawn: performance.now(), screenFlash: 0, stagger: 0, slowFactor: 1.0,
+        levelUpBanner: 0, levelUpText: '',
+        player: { legPhase: 0, bobPhase: 0 },
+      };
+      mountFarOff = 0; mountNrOff = 0;
+      initGroundDots();
+      spawnWord();
+    }
+
+    function spawnWord() {
+      const hazards  = window.TYPERUN_WORDS.hazards;
+      const isHazard = game.level >= 3 && Math.random() < 0.13;
+      const text     = isHazard ? hazards[Math.floor(Math.random() * hazards.length)] : pickWord(game.level);
+      const lane     = randomLane();
+      game.words.push({
+        text, typed: 0, x: W + 50, y: LANE_Y[lane],
+        speed: effSpeed(game.level, game.perfectStreak) * (isHazard ? 0.82 : 1),
+        lane, flashTimer: 0, hasError: false, isHazard, dodgeFlash: 0,
+      });
+      updateActive();
+    }
+
+    function updateActive() {
+      const normal = game.words.filter(w => !w.isHazard);
+      const pool   = normal.length > 0 ? normal : game.words;
+      game.activeWord = pool.length > 0 ? pool.reduce((a, b) => a.x < b.x ? a : b) : null;
+    }
+
+    function endGame() {
+      game.state = 'gameover';
+      TYPERUN_AUDIO.playGameOver();
+      if (game.score > bestScore) { bestScore = game.score; localStorage.setItem('typerun_best', bestScore); }
+      if (game.sessionBestStreak > bestStreak) { bestStreak = game.sessionBestStreak; localStorage.setItem('typerun_streak', bestStreak); }
+      document.getElementById('go-score').textContent   = game.score;
+      document.getElementById('go-words').textContent   = game.wordsTyped;
+      document.getElementById('go-perfect').textContent = game.perfectTotal;
+      document.getElementById('go-streak').textContent  = game.sessionBestStreak;
+      document.getElementById('go-best').textContent    = bestScore;
+      document.getElementById('gameover-screen').classList.remove('hidden');
+      document.getElementById('hud').classList.add('hidden');
+    }
+
+    function startGame() {
+      ['start-screen','gameover-screen','pause-screen'].forEach(id => document.getElementById(id).classList.add('hidden'));
+      document.getElementById('hud').classList.remove('hidden');
+      resetGame();
+    }
+
+    // ── Particles ────────────────────────────────────────────────────────────
+    const BURST_C   = ['#ffd700','#ff6b6b','#00ff88','#ff9f43','#74b9ff','#fd79a8','#fff'];
+    const PERFECT_C = ['#ffd700','#fff700','#ffee00','#ffe000','#ffc000','#ffb000'];
+    const HAZARD_C  = ['#ff4060','#ff6b81','#ffffff'];
+
+    function spawnBurst(x, y, type) {
+      const colors = type === 'perfect' ? PERFECT_C : type === 'hazard' ? HAZARD_C : BURST_C;
+      const count  = type === 'perfect' ? 30 : 18;
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const spd   = 1.5 + Math.random() * (type === 'perfect' ? 5 : 3.5);
+        game.particles.push({
+          x, y, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd - (type === 'perfect' ? 2.5 : 1.5),
+          life: 1.0, decay: 0.016 + Math.random() * 0.020,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          size: 2 + Math.random() * (type === 'perfect' ? 4 : 3),
+        });
+      }
+    }
+    function spawnFloat(x, y, text, color) {
+      game.floats.push({ x, y, text, color: color || '#ffd700', life: 1.0 });
+    }
+
+    // ── Input ────────────────────────────────────────────────────────────────
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (game.state === 'playing') {
+          game.state = 'paused';
+          document.getElementById('pause-screen').classList.remove('hidden');
+        } else if (game.state === 'paused') {
+          game.state = 'playing';
+          game.lastSpawn = performance.now();
+          document.getElementById('pause-screen').classList.add('hidden');
+        }
+        return;
+      }
+      if (e.key === 'Enter') { if (game.state === 'idle' || game.state === 'gameover') startGame(); return; }
+      if (game.state !== 'playing' || !game.activeWord || e.key.length !== 1) return;
+
+      const w = game.activeWord;
+
+      if (w.isHazard) {
+        const others = LANE_KEYS.filter(k => k !== w.lane);
+        const nl     = others[Math.floor(Math.random() * others.length)];
+        w.lane = nl; w.y = LANE_Y[nl]; w.dodgeFlash = 14; w.speed *= 1.25;
+        if (game.perfectStreak > 0) game.perfectStreak = 0;
+        ctx.font = FONT;
+        spawnBurst(w.x + ctx.measureText(w.text).width * 0.5, w.y, 'hazard');
+        TYPERUN_AUDIO.playHazardDodge();
+        return;
+      }
+
+      const expected = w.text[w.typed];
+      if (e.key === expected) {
+        TYPERUN_AUDIO.playKeyCorrect();
+        w.typed++;
+        if (w.typed === w.text.length) {
+          const isPerfect = !w.hasError;
+          if (isPerfect) {
+            game.perfectStreak++;
+            game.perfectTotal++;
+            if (game.perfectStreak > game.sessionBestStreak) game.sessionBestStreak = game.perfectStreak;
+            if ([5,10,15,20].includes(game.perfectStreak)) TYPERUN_AUDIO.playStreakMilestone();
+          } else {
+            game.perfectStreak = 0;
+          }
+          ctx.font = FONT;
+          const cx = w.x + ctx.measureText(w.text).width * 0.5;
+          spawnBurst(cx, w.y - 8, isPerfect ? 'perfect' : 'normal');
+          TYPERUN_AUDIO.playWordDestroy(isPerfect);
+          const base  = w.text.length * 10 * game.level;
+          const bonus = isPerfect ? Math.floor(base * 0.5 * Math.min(game.perfectStreak, 10) / 10) : 0;
+          const pts   = base + bonus;
+          spawnFloat(cx, w.y - 22, isPerfect && game.perfectStreak >= 2 ? `+${pts} x${game.perfectStreak}` : `+${pts}`, isPerfect ? '#ffd700' : '#00ff88');
+          game.score += pts;
+          game.wordsTyped++;
+          const newLv = getLevel(game.wordsTyped);
+          if (newLv > game.level) { game.levelUpBanner = 90; game.levelUpText = `LEVEL ${newLv}`; TYPERUN_AUDIO.playLevelUp(); }
+          game.level = newLv;
+          game.words.splice(game.words.indexOf(w), 1);
+          updateActive();
+        }
+      } else {
+        TYPERUN_AUDIO.playKeyWrong();
+        w.hasError = true; w.flashTimer = 13;
+        if (game.perfectStreak > 0) game.perfectStreak = 0;
+      }
+    });
+
+    // ── Update ───────────────────────────────────────────────────────────────
+    function updateStagger() {
+      if (game.stagger > 0) { game.slowFactor = 0.32 + (1 - game.stagger / 30) * 0.68; game.stagger--; }
+      else game.slowFactor = 1.0;
+    }
+
+    function updateWords() {
+      const now = performance.now();
+      if (game.stagger > 0) { game.lastSpawn = now; }
+      else if (now - game.lastSpawn > effInterval(game.level, game.perfectStreak)) { spawnWord(); game.lastSpawn = now; }
+
+      const hitX = PLAYER_X + 18;
+      for (let i = game.words.length - 1; i >= 0; i--) {
+        const w = game.words[i];
+        w.x -= w.speed * game.slowFactor;
+        if (w.flashTimer > 0) w.flashTimer--;
+        if (w.dodgeFlash > 0) w.dodgeFlash--;
+        if (w.x + measureWord(w.text) < hitX) {
+          if (w.isHazard) { game.words.splice(i, 1); updateActive(); }
+          else {
+            game.lives--; game.perfectStreak = 0; game.screenFlash = 22; game.stagger = 30;
+            TYPERUN_AUDIO.playMiss();
+            game.words.splice(i, 1); updateActive();
+            if (game.lives <= 0) { endGame(); return; }
+          }
+        }
+      }
+    }
+
+    function updateParticles() {
+      for (let i = game.particles.length - 1; i >= 0; i--) {
+        const p = game.particles[i];
+        p.x += p.vx; p.y += p.vy; p.vy += 0.13; p.life -= p.decay;
+        if (p.life <= 0) game.particles.splice(i, 1);
+      }
+    }
+    function updateFloats() {
+      for (let i = game.floats.length - 1; i >= 0; i--) {
+        const f = game.floats[i];
+        f.y -= 1.1; f.life -= 0.024;
+        if (f.life <= 0) game.floats.splice(i, 1);
+      }
+    }
+
+    function updateWorld() {
+      const spd = effSpeed(game.level, game.perfectStreak) * game.slowFactor;
+      for (const d of groundDots) { d.x -= spd * d.layer * 0.7; if (d.x + d.len < 0) d.x = W + d.len; }
+      for (const s of stars)      { s.x -= spd * s.speed * 0.06; s.twinkle += 0.025; if (s.x < 0) s.x = W; }
+      mountFarOff += spd * 0.14;
+      mountNrOff  += spd * 0.30;
+      const streak = game.perfectStreak;
+      if (streak >= 3) {
+        const intensity   = Math.min((streak - 3) / 17, 1);
+        const activeCount = Math.floor(4 + intensity * 18);
+        for (let i = 0; i < Math.min(activeCount, speedLines.length); i++) {
+          const s = speedLines[i];
+          s.x -= s.speed * (0.8 + intensity * 1.5) * game.slowFactor;
+          if (s.x + s.width < 0) { s.x = W + s.width; s.y = 15 + Math.random() * (GROUND_Y - 30); s.width = 30 + Math.random() * 160; }
+        }
+      }
+    }
+
+    // ── Draw ─────────────────────────────────────────────────────────────────
+    function measureWord(text) { ctx.font = FONT; return ctx.measureText(text).width; }
+
+    function drawMountainLayer(offX, baseY, amp, freq, r, g, b, alpha) {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle   = `rgb(${r},${g},${b})`;
+      ctx.beginPath();
+      ctx.moveTo(-1, H);
+      ctx.lineTo(-1, baseY);
+      for (let x = 0; x <= W + 4; x += 3) {
+        const nx = x + offX;
+        const h  = Math.sin(nx * freq)            * amp * 0.40
+                 + Math.sin(nx * freq * 2.1 + 1)  * amp * 0.34
+                 + Math.sin(nx * freq * 0.5 + 2)  * amp * 0.26;
+        ctx.lineTo(x, baseY - amp * 0.5 - h);
+      }
+      ctx.lineTo(W + 1, H);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawBackground() {
+      const streak = game.perfectStreak || 0;
+      const t      = Math.min(streak / 20, 1);
+      const t1r = Math.round(18 + t*24), t1g = Math.round(18 - t*8),  t1b = Math.round(38 + t*22);
+      const t2r = Math.round(14 + t*14), t2g = Math.round(25 - t*18), t2b = Math.round(50 - t*6);
+      const skyG = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+      skyG.addColorStop(0, `rgb(${t1r},${t1g},${t1b})`);
+      skyG.addColorStop(1, `rgb(${t2r},${t2g},${t2b})`);
+      ctx.fillStyle = skyG;
+      ctx.fillRect(0, 0, W, GROUND_Y);
+
+      for (const s of stars) {
+        const a = Math.max(0, 0.35 + Math.sin(s.twinkle) * 0.30);
+        ctx.fillStyle = `rgba(255,255,255,${a})`;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+      }
+
+      if (streak >= 3) {
+        const intensity = Math.min((streak - 3) / 17, 1);
+        const count     = Math.floor(4 + intensity * 18);
+        ctx.strokeStyle = `rgba(200,170,255,${0.04 + intensity * 0.20})`;
+        for (let i = 0; i < Math.min(count, speedLines.length); i++) {
+          const s = speedLines[i];
+          ctx.lineWidth = 0.6 + intensity * 1.5;
+          ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x + s.width * (0.3 + intensity * 0.7), s.y); ctx.stroke();
+        }
+      }
+
+      drawMountainLayer(mountFarOff, GROUND_Y - 80, 72, 0.0065, 8+t*10, 6+t*2, 20+t*16, 0.95);
+      drawMountainLayer(mountNrOff,  GROUND_Y - 38, 38, 0.012,  12+t*8, 10,    28+t*12, 0.95);
+
+      ctx.fillStyle = '#131320';
+      ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+      ctx.strokeStyle = '#2e2e4a'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, GROUND_Y); ctx.lineTo(W, GROUND_Y); ctx.stroke();
+      ctx.strokeStyle = '#222238'; ctx.lineWidth = 1.5;
+      for (const d of groundDots) { ctx.beginPath(); ctx.moveTo(d.x, GROUND_Y+7); ctx.lineTo(d.x+d.len, GROUND_Y+7); ctx.stroke(); }
+    }
+
+    function drawLaneThreatIndicators() {
+      const iW = 6, iH = 30, iX = 15;
+      for (const lk of LANE_KEYS) {
+        const lY   = LANE_Y[lk];
+        const pool = game.words.filter(w => w.lane === lk && !w.isHazard);
+        if (pool.length === 0) { ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fillRect(iX, lY - iH/2, iW, iH); continue; }
+        const cl     = pool.reduce((a, b) => a.x < b.x ? a : b);
+        const danger = Math.max(0, Math.min(1, 1 - (cl.x - PLAYER_X - 20) / (W * 0.70 - PLAYER_X)));
+        const r = danger < 0.5 ? Math.round(danger * 2 * 255) : 255;
+        const g = danger < 0.5 ? 210 : Math.round((1 - (danger - 0.5) * 2) * 190);
+        const fillH = Math.round(iH * (0.15 + danger * 0.85));
+        ctx.save();
+        ctx.shadowColor = `rgb(${r},${g},0)`; ctx.shadowBlur = 2 + danger * 10;
+        ctx.fillStyle   = `rgba(${r},${g},0,${0.15 + danger * 0.75})`;
+        ctx.fillRect(iX, lY - fillH/2, iW, fillH);
+        ctx.shadowBlur = 0; ctx.strokeStyle = `rgba(${r},${g},0,0.2)`; ctx.lineWidth = 1;
+        ctx.strokeRect(iX, lY - iH/2, iW, iH);
+        ctx.restore();
+      }
+    }
+
+    function drawScreenFlash() {
+      if (game.screenFlash <= 0) return;
+      ctx.fillStyle = `rgba(255,60,80,${(game.screenFlash/22)*0.24})`;
+      ctx.fillRect(0, 0, W, H);
+      game.screenFlash--;
+    }
+
+    function drawPlayer() {
+      const p    = game.player;
+      const bob  = Math.sin(p.bobPhase) * 1.8;
+      const legA = Math.sin(p.legPhase);
+      const legB = Math.sin(p.legPhase + Math.PI);
+      const st   = game.stagger / 30;
+      const sx   = st > 0 ? Math.sin(game.stagger * 2.1) * st * 11 : 0;
+      const sy   = st > 0 ? Math.abs(Math.sin(game.stagger * 1.1)) * st * 5 : 0;
+
+      ctx.save();
+      ctx.translate(PLAYER_X + sx, GROUND_Y - 50 + bob + sy);
+
+      // Streak aura
+      const streak = game.perfectStreak;
+      if (streak >= 5) {
+        const g = Math.min((streak - 5) / 15, 1);
+        ctx.save();
+        ctx.globalAlpha = 0.18 + g * 0.22;
+        ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 12 + g * 22;
+        ctx.fillStyle   = '#ffd700';
+        ctx.beginPath(); ctx.ellipse(0, 15, 14 + g*10, 30 + g*14, 0, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.20)';
+      ctx.beginPath(); ctx.ellipse(0, 52, 12, 4, 0, 0, Math.PI*2); ctx.fill();
+
+      const hurt  = st > 0.4;
+      const bodyC = hurt ? '#8a3050' : '#6c5ce7';
+      const strpC = hurt ? '#c06080' : '#a29bfe';
+
+      ctx.fillStyle = '#222830';
+      ctx.save(); ctx.translate(-4,34); ctx.rotate(legA*0.35); ctx.fillRect(-3,0,6,16); ctx.restore();
+      ctx.save(); ctx.translate( 4,34); ctx.rotate(legB*0.35); ctx.fillRect(-3,0,6,16); ctx.restore();
+
+      ctx.fillStyle = bodyC;  ctx.fillRect(-9, 10, 18, 22);
+      ctx.fillStyle = strpC;  ctx.fillRect(-9, 16, 18,  4);
+      ctx.fillStyle = '#fdcb6e'; ctx.fillRect(-7, -5, 14, 14);
+      ctx.fillStyle = '#222830'; ctx.fillRect(-7, -5, 14,  4);
+      if (hurt) { ctx.fillRect(-4, 2, 8, 2); }
+      else      { ctx.fillRect(-4, 1, 3, 3); ctx.fillRect(1, 1, 3, 3); }
+
+      ctx.fillStyle = bodyC;
+      ctx.save(); ctx.translate(-9,14); ctx.rotate(-legB*0.3); ctx.fillRect(-5,0,5,12); ctx.restore();
+      ctx.save(); ctx.translate( 9,14); ctx.rotate(-legA*0.3); ctx.fillRect( 0,0,5,12); ctx.restore();
+
+      ctx.restore();
+      p.legPhase += 0.19; p.bobPhase += 0.13;
+    }
+
+    function drawWord(word) {
+      const isActive = word === game.activeWord;
+      const flashing = word.flashTimer > 0;
+      const dodging  = word.dodgeFlash > 0;
+      ctx.font = FONT;
+      const tw = ctx.measureText(word.text).width;
+
+      if (word.isHazard) {
+        ctx.fillStyle   = dodging ? 'rgba(255,255,255,0.16)' : 'rgba(255,60,80,0.07)';
+        ctx.fillRect(word.x-5, word.y-20, tw+10, 26);
+        ctx.strokeStyle = dodging ? 'rgba(255,255,255,0.85)' : isActive ? 'rgba(255,60,80,0.75)' : 'rgba(255,60,80,0.28)';
+        ctx.lineWidth   = isActive ? 1.5 : 1;
+        ctx.strokeRect(word.x-5, word.y-20, tw+10, 26);
+        if (isActive) {
+          ctx.font = FONT_SM; ctx.fillStyle = 'rgba(255,60,80,0.75)'; ctx.textAlign = 'center';
+          ctx.fillText('⚠ AVOID', word.x + tw/2, word.y - 23);
+          ctx.textAlign = 'left'; ctx.font = FONT;
+        }
+        ctx.fillStyle = dodging ? '#fff' : isActive ? '#ff4060' : 'rgba(255,80,100,0.48)';
+        ctx.fillText(word.text, word.x, word.y);
+        return;
+      }
+
+      if (isActive) {
+        ctx.fillStyle   = 'rgba(255,215,0,0.06)';
+        ctx.fillRect(word.x-5, word.y-20, tw+10, 26);
+        ctx.strokeStyle = flashing ? 'rgba(255,60,80,0.5)' : 'rgba(255,215,0,0.32)';
+        ctx.lineWidth   = 1;
+        ctx.strokeRect(word.x-5, word.y-20, tw+10, 26);
+      }
+
+      let cx = word.x;
+      for (let i = 0; i < word.text.length; i++) {
+        const ch = word.text[i], cw = ctx.measureText(ch).width;
+        ctx.fillStyle = i < word.typed          ? '#00ff88'
+                      : isActive && flashing    ? '#ff4060'
+                      : isActive                ? '#ffd700'
+                      :                           'rgba(255,255,255,0.55)';
+        ctx.fillText(ch, cx, word.y);
+        cx += cw;
+      }
+    }
+
+    function drawParticles() {
+      for (const p of game.particles) {
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle   = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawFloats() {
+      ctx.font = "bold 13px 'Space Mono','Courier New',monospace";
+      ctx.textAlign = 'center';
+      for (const f of game.floats) { ctx.globalAlpha = f.life; ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y); }
+      ctx.globalAlpha = 1; ctx.textAlign = 'left';
+    }
+
+    function drawLevelUpBanner() {
+      if (game.levelUpBanner <= 0) return;
+      const t     = game.levelUpBanner / 90;
+      const alpha = game.levelUpBanner > 72 ? (90 - game.levelUpBanner) / 18 : t;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, alpha * 1.4);
+      ctx.font        = "bold 40px 'Space Mono','Courier New',monospace";
+      ctx.textAlign   = 'center';
+      ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 18 + (1 - t) * 10;
+      ctx.fillStyle   = '#ffd700';
+      ctx.fillText(game.levelUpText, W/2, H/2 - 10);
+      ctx.restore();
+      game.levelUpBanner--;
+    }
+
+    function drawCRT() {
+      ctx.globalAlpha = 0.025; ctx.fillStyle = '#000';
+      for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 2);
+      ctx.globalAlpha = 1;
+      const vig = ctx.createRadialGradient(W/2, H/2, H*0.28, W/2, H/2, H*0.82);
+      vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.40)');
+      ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+    }
+
+    function drawHUD() {
+      document.getElementById('score-val').textContent = game.score;
+      document.getElementById('level-val').textContent = game.level;
+      document.getElementById('lives-display').innerHTML =
+        `<span style="color:#ff4060">${'♥'.repeat(game.lives)}</span><span style="color:#333">${'♡'.repeat(3-game.lives)}</span>`;
+      const el = document.getElementById('streak-display');
+      if (game.perfectStreak >= 2) {
+        const label = game.perfectStreak >= 10 ? `★ PERFECT x${game.perfectStreak} ★`
+                    : game.perfectStreak >= 5  ? `◆ PERFECT x${game.perfectStreak}`
+                    :                            `PERFECT x${game.perfectStreak}`;
+        el.textContent = label; el.style.opacity = '1';
+        const inten = Math.min(game.perfectStreak/10, 1);
+        const r = 255, g = Math.round(159 + (255-159)*inten), b = Math.round(67*(1-inten));
+        el.style.color = `rgb(${r},${g},${b})`;
+        el.style.textShadow = `0 0 ${8+inten*12}px rgba(${r},${g},${b},0.65)`;
+      } else { el.textContent = ''; el.style.opacity = '0'; }
+    }
+
+    // ── Main loop ─────────────────────────────────────────────────────────────
+    function loop() {
+      requestAnimationFrame(loop);
+      ctx.clearRect(0, 0, W, H);
+      drawBackground();
+
+      if (game.state !== 'playing' && game.state !== 'paused') { drawCRT(); return; }
+
+      const live = game.state === 'playing';
+      if (live) { updateStagger(); updateWorld(); updateWords(); updateParticles(); updateFloats(); }
+
+      drawLaneThreatIndicators();
+      drawPlayer();
+      for (const w of game.words) drawWord(w);
+      drawParticles();
+      drawFloats();
+      drawLevelUpBanner();
+      if (live) drawScreenFlash();
+      drawCRT();
+      drawHUD();
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+    document.getElementById('best-score-display').textContent = `BEST: ${bestScore}`;
+    initStars(); initGroundDots(); initSpeedLines();
+    document.fonts.ready.then(() => requestAnimationFrame(loop));
+  </script>
+</body>
+</html>
