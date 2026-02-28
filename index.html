@@ -141,6 +141,7 @@
       <div id="level-display">LEVEL <span id="level-val">1</span></div>
       <div id="streak-display"></div>
       <div id="lives-display"></div>
+      <div id="mute-indicator" style="position:absolute;bottom:8px;right:10px;font-size:0.85rem;opacity:0;transition:opacity 0.3s;pointer-events:none;">🔊</div>
     </div>
 
     <div id="start-screen" class="overlay">
@@ -153,7 +154,7 @@
 
     <div id="pause-screen" class="overlay hidden">
       <h2>PAUSED</h2>
-      <div class="resume-hint">ESC to resume</div>
+      <div class="resume-hint">ESC to resume &nbsp;·&nbsp; M to mute</div>
     </div>
 
     <div id="gameover-screen" class="overlay hidden">
@@ -269,6 +270,7 @@
 
     function endGame() {
       game.state = 'gameover';
+      TYPERUN_AUDIO.stopMusic(2);
       TYPERUN_AUDIO.playGameOver();
       if (game.score > bestScore) { bestScore = game.score; localStorage.setItem('typerun_best', bestScore); }
       if (game.sessionBestStreak > bestStreak) { bestStreak = game.sessionBestStreak; localStorage.setItem('typerun_streak', bestStreak); }
@@ -284,6 +286,7 @@
     function startGame() {
       ['start-screen','gameover-screen','pause-screen'].forEach(id => document.getElementById(id).classList.add('hidden'));
       document.getElementById('hud').classList.remove('hidden');
+      TYPERUN_AUDIO.startMusic(130);
       resetGame();
     }
 
@@ -315,12 +318,20 @@
       if (e.key === 'Escape') {
         if (game.state === 'playing') {
           game.state = 'paused';
+          TYPERUN_AUDIO.pauseMusic();
           document.getElementById('pause-screen').classList.remove('hidden');
         } else if (game.state === 'paused') {
           game.state = 'playing';
           game.lastSpawn = performance.now();
+          TYPERUN_AUDIO.resumeMusic();
           document.getElementById('pause-screen').classList.add('hidden');
         }
+        return;
+      }
+      if (e.key === 'm' || e.key === 'M') {
+        const muted = TYPERUN_AUDIO.toggleMute();
+        document.getElementById('mute-indicator').textContent = muted ? '🔇' : '🔊';
+        document.getElementById('mute-indicator').style.opacity = muted ? '0.8' : '0';
         return;
       }
       if (e.key === 'Enter') { if (game.state === 'idle' || game.state === 'gameover') startGame(); return; }
@@ -364,7 +375,11 @@
           game.score += pts;
           game.wordsTyped++;
           const newLv = getLevel(game.wordsTyped);
-          if (newLv > game.level) { game.levelUpBanner = 90; game.levelUpText = `LEVEL ${newLv}`; TYPERUN_AUDIO.playLevelUp(); }
+          if (newLv > game.level) {
+            game.levelUpBanner = 90; game.levelUpText = `LEVEL ${newLv}`;
+            TYPERUN_AUDIO.playLevelUp();
+            TYPERUN_AUDIO.setBPM(130 + (newLv - 1) * 2);
+          }
           game.level = newLv;
           game.words.splice(game.words.indexOf(w), 1);
           updateActive();
